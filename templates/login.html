@@ -1,0 +1,50 @@
+<html>
+
+<head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1,user-scalable=no">
+    <title>{{.title}}</title>
+    <link rel="shortcut icon" href="/favicon.ico" type="image/vnd.microsoft.icon">
+    <link rel="icon" href="/favicon.ico" type="image/vnd.microsoft.icon">
+    <link rel="stylesheet" type="text/css" href="https://cdnjs.cloudflare.com/ajax/libs/normalize/7.0.0/normalize.min.css?v=7.0.0">
+    <link rel="stylesheet" type="text/css" href="https://cdnjs.cloudflare.com/ajax/libs/element-ui/2.0.8/theme-chalk/index.css?v=2.0.8">
+    <link rel="stylesheet" type="text/css" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css?v=4.7.0">
+    <link rel="stylesheet" type="text/css" href="/css/my-style.css?v=0.0.0">
+</head>
+
+<body>
+    <el-container>
+        <div id="main">
+            <el-header>
+                <el-menu :default-active="activeIndex" mode="horizontal">
+                    <el-menu-item index="1">持ち物管理</el-menu-item>
+                </el-menu>
+            </el-header>
+            <el-main>
+                <div class="google-login">
+                    <a href="/v1/google/login">
+                        <img src="/img/btn_google_signin_dark_normal_web@2x.png" alt="Login" onmouseover="this.src='/img/btn_google_signin_dark_pressed_web@2x.png'"
+                            onmouseout="this.src='/img/btn_google_signin_dark_normal_web@2x.png'">
+                    </a>
+                </div>
+
+                <el-row>
+                    <el-col :span="24">
+                    </el-col>
+                </el-row>
+
+            </el-main>
+        </div>
+
+    </el-container>
+
+    <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.2.1/jquery.min.js?v=3.2.1"></script>
+    <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/vue/2.5.13/vue.min.js?v=2.5.13"></script>
+    <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/element-ui/2.0.8/index.js?v=2.0.8"></script>
+    <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/element-ui/2.0.8/locale/ja.min.js?v=2.0.8"></script>
+    <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/axios/0.17.1/axios.min.js?v=0.17.1"></script>
+    <script type="text/javascript" src="/js/login.js?v=0.0.0"></script>
+
+</body>
+
+</html>

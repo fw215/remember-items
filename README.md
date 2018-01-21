@@ -10,3 +10,15 @@
     "auth_code": "xxxxxxx"
 }
 ```
+
+## Create dbConf.json
+```
+{
+    "dsn": "%s:%s@%s/%s?charset=%s",
+    "username": "xxxxxxx",
+    "password": "xxxxxxx",
+    "server": "tcp(127.0.0.1:3306)",
+    "database": "xxxxxxx",
+    "charset": "utf8"
+}
+```

@@ -1,0 +1,58 @@
+<html>
+
+<head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1,user-scalable=no">
+    <title>{{.title}}</title>
+    <link rel="shortcut icon" href="/favicon.ico" type="image/vnd.microsoft.icon">
+    <link rel="icon" href="/favicon.ico" type="image/vnd.microsoft.icon">
+    <link rel="stylesheet" type="text/css" href="https://cdnjs.cloudflare.com/ajax/libs/normalize/7.0.0/normalize.min.css?v=7.0.0">
+    <link rel="stylesheet" type="text/css" href="https://cdnjs.cloudflare.com/ajax/libs/element-ui/2.0.8/theme-chalk/index.css?v=2.0.8">
+    <link rel="stylesheet" type="text/css" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css?v=4.7.0">
+    <link rel="stylesheet" type="text/css" href="/css/my-style.css?v=0.0.0">
+</head>
+
+<body>
+    <el-container>
+        <div id="main">
+            <el-header>
+                <el-menu :default-active="activeIndex" mode="horizontal">
+                    <el-menu-item index="1">持ち物管理</el-menu-item>
+                </el-menu>
+            </el-header>
+            <el-main>
+
+                <el-row>
+                    <el-col :span="24">
+                        <el-button type="primary" plain>カテゴリ追加</el-button>
+                    </el-col>
+                    <el-col :span="24">
+                        <el-table :data="categories" stripe style="width: 100%">
+                            <el-table-column prop="category_name" label="カテゴリ">
+                            </el-table-column>
+                            <el-table-column label="">
+                                <template slot-scope="scope">
+                                    <el-button type="primary" class="btn-edit" round @click="goEdit(scope.row.category_id)">
+                                        <i class="fa fa-pencil-square-o" aria-hidden="true"></i>
+                                    </el-button>
+                                </template>
+                            </el-table-column>
+                        </el-table>
+                    </el-col>
+                </el-row>
+
+            </el-main>
+        </div>
+
+    </el-container>
+
+    <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.2.1/jquery.min.js?v=3.2.1"></script>
+    <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/vue/2.5.13/vue.min.js?v=2.5.13"></script>
+    <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/element-ui/2.0.8/index.js?v=2.0.8"></script>
+    <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/element-ui/2.0.8/locale/ja.min.js?v=2.0.8"></script>
+    <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/axios/0.17.1/axios.min.js?v=0.17.1"></script>
+    <script type="text/javascript" src="/js/index.js?v=0.0.0"></script>
+
+</body>
+
+</html>
