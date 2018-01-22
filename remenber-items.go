@@ -7,11 +7,14 @@ import (
 	"errors"
 	"fmt"
 	"io/ioutil"
+	"net/http"
+	"net/url"
 	"time"
 
-	"github.com/gin-contrib/multitemplate"
 	_ "github.com/go-sql-driver/mysql"
 
+	"github.com/gin-contrib/multitemplate"
+	"github.com/gin-gonic/contrib/sessions"
 	"github.com/gin-gonic/gin"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
@@ -19,12 +22,13 @@ import (
 	v2 "google.golang.org/api/oauth2/v2"
 )
 
-// AppConf GoogleAuth用config
+// AppConf app用config
 type AppConf struct {
 	ClientID     string `json:"client_id"`
 	ClientSecret string `json:"client_secret"`
 	RedirectURL  string `json:"redirect_url"`
 	AuthCode     string `json:"auth_code"`
+	CookieSecret string `json:"cookie_secret"`
 }
 
 // CallbackRequest コールバックリクエスト
@@ -34,7 +38,7 @@ type CallbackRequest struct {
 }
 
 var appConf AppConf
-var config oauth2.Config
+var googleConf oauth2.Config
 
 func main() {
 	GinRun()
@@ -51,6 +55,8 @@ func createMyRender() multitemplate.Render {
 
 // GinRun gin実行
 func GinRun() {
+	SetAppConfig()
+
 	router := gin.Default()
 	router.Static("/css", "./css")
 	router.Static("/js", "./js")
@@ -58,6 +64,8 @@ func GinRun() {
 	router.StaticFile("/favicon.ico", "./favicon.ico")
 
 	router.HTMLRender = createMyRender()
+	store := sessions.NewCookieStore([]byte(appConf.CookieSecret))
+	router.Use(sessions.Sessions("RememberItems", store))
 
 	router.GET("/", Index)
 	router.GET("/login", Login)
@@ -81,6 +89,12 @@ func Login(c *gin.Context) {
 
 // Index トップページ
 func Index(c *gin.Context) {
+	err := LoginCheck(c)
+	if err != nil {
+		fmt.Println(err)
+		c.Redirect(302, "/login")
+		return
+	}
 	c.HTML(200, "Index", gin.H{
 		"title": "持ち物管理",
 	})
@@ -88,6 +102,12 @@ func Index(c *gin.Context) {
 
 // Items トップページ
 func Items(c *gin.Context) {
+	err := LoginCheck(c)
+	if err != nil {
+		fmt.Println(err)
+		c.Redirect(302, "/login")
+		return
+	}
 	c.HTML(200, "Items", gin.H{
 		"title": "持ち物管理",
 	})
@@ -95,6 +115,8 @@ func Items(c *gin.Context) {
 
 // v1Login ログイン
 func v1Login(c *gin.Context) {
+	ClearSession(c)
+
 	url, err := GetGoogleAuthURL()
 	if err != nil {
 		c.JSON(200, gin.H{
@@ -104,7 +126,7 @@ func v1Login(c *gin.Context) {
 		return
 	}
 
-	c.Redirect(302, url)
+	c.Redirect(302, url+"&access_type=offline")
 }
 
 // v1GoogleOAuth Google認証
@@ -152,8 +174,9 @@ func v1GoogleOAuth(c *gin.Context) {
 	}
 
 	now := time.Now().Format("2006-01-02 15:04:05")
-	insertSQL := "INSERT INTO `users`(`google_id`, `google_email`, `google_access_token`, `google_expiry`, `created`, `modified`) VALUES (?,?,?,?,?,?)"
-	_, err = transaction.Exec(insertSQL, ID, Email, token.AccessToken, token.Expiry, now, now)
+	Expiry := token.Expiry.Format("2006-01-02 15:04:05")
+	insertSQL := "INSERT INTO `users`(`google_id`, `google_email`, `google_access_token`, `google_expiry`, `google_refresh_token`, `created`, `modified`) VALUES (?,?,?,?,?,?,?)"
+	_, err = transaction.Exec(insertSQL, ID, Email, token.AccessToken, Expiry, token.RefreshToken, now, now)
 	if err != nil {
 		transaction.Rollback()
 		c.JSON(200, gin.H{
@@ -163,6 +186,10 @@ func v1GoogleOAuth(c *gin.Context) {
 		return
 	}
 	transaction.Commit()
+
+	session := sessions.Default(c)
+	session.Set("accessToken", token.AccessToken)
+	session.Save()
 
 	c.Redirect(302, "/")
 }
@@ -174,11 +201,97 @@ func NoRoute(c *gin.Context) {
 	})
 }
 
+// GoogleAccessResponse アクセストークン有効チェック
+type GoogleAccessResponse struct {
+	Azp           string `json:"azp"`
+	Aud           string `json:"aud"`
+	Sub           string `json:"sub"`
+	Scope         string `json:"scope"`
+	Exp           string `json:"exp"`
+	ExpiresIn     string `json:"expires_in"`
+	Email         string `json:"email"`
+	EmailVerified string `json:"email_verified"`
+	AccessType    string `json:"access_type"`
+}
+
+// LoginCheck ログイン状態
+func LoginCheck(c *gin.Context) error {
+	session := sessions.Default(c)
+	accessToken := session.Get("accessToken")
+	if accessToken == nil {
+		return errors.New("ログインしてください")
+	}
+
+	accessTokenParam := HTTPParam{
+		Key:   "access_token",
+		Value: accessToken.(string),
+	}
+	var params []HTTPParam
+	params = append(params, accessTokenParam)
+	resp, err := RequestGET("https://www.googleapis.com/oauth2/v3/tokeninfo", params)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	var googleAccessResponse GoogleAccessResponse
+	if err := json.NewDecoder(resp.Body).Decode(&googleAccessResponse); err != nil {
+		return err
+	}
+	if googleAccessResponse.Sub == "" {
+		return errors.New("アクセストークンの有効期限が切れています")
+	}
+
+	InitDB()
+	defer db.Close()
+
+	if err = db.Ping(); err != nil {
+		return errors.New("データベース接続エラーが発生しました")
+	}
+
+	var userID string
+	if err := db.QueryRow("SELECT user_id FROM users WHERE google_id = ? AND google_access_token = ? LIMIT 1", googleAccessResponse.Sub, accessToken.(string)).Scan(&userID); err != nil {
+		return errors.New("データベース接続エラーが発生しました")
+	}
+	if userID == "" {
+		return errors.New("新規登録してください")
+	}
+
+	return nil
+
+	// urlValue := url.Values{
+	// 	"client_id":     {appConf.ClientID},
+	// 	"client_secret": {appConf.ClientSecret},
+	// 	"refresh_token": {"xxxxxxxxxxxxxxxxxxxxxxx"},
+	// 	"grant_type":    {"refresh_token"},
+	// }
+
+	// resp, err = http.PostForm("https://www.googleapis.com/oauth2/v4/token", urlValue)
+	// if err != nil {
+	// 	log.Panic("Error when renew token %v", err)
+	// }
+
+	// body, err := ioutil.ReadAll(resp.Body)
+	// resp.Body.Close()
+	// if err != nil {
+	// 	log.Fatal(err)
+	// }
+
+	// fmt.Printf("\n%s\n", body)
+}
+
+// ClearSession セッションクリア
+func ClearSession(c *gin.Context) {
+	session := sessions.Default(c)
+	session.Clear()
+	session.Save()
+}
+
 // GetGoogleCallback GoogleAuth用callback
 func GetGoogleCallback(code, state string) (*oauth2.Token, error) {
 	context := context.Background()
 
-	token, err := config.Exchange(context, code)
+	token, err := googleConf.Exchange(context, code)
 	if err != nil {
 		return nil, err
 	}
@@ -197,7 +310,7 @@ func GetGoogleCallback(code, state string) (*oauth2.Token, error) {
 // GetGoogleInformaion GoogleアカウントのIDとEmailを取得
 func GetGoogleInformaion(token *oauth2.Token) (string, string, error) {
 	context := context.Background()
-	service, _ := v2.New(config.Client(context, token))
+	service, _ := v2.New(googleConf.Client(context, token))
 	tokenInfo, _ := service.Tokeninfo().AccessToken(token.AccessToken).Context(context).Do()
 
 	ID := tokenInfo.UserId
@@ -206,8 +319,28 @@ func GetGoogleInformaion(token *oauth2.Token) (string, string, error) {
 	return ID, Email, nil
 }
 
-// SetGoogleConfig Google用Config
-func SetGoogleConfig() error {
+// HTTPParam リクエスト用パラメータ
+type HTTPParam struct {
+	Key   string
+	Value string
+}
+
+// RequestGET GETリクエスト
+func RequestGET(target string, params []HTTPParam) (*http.Response, error) {
+	values := url.Values{}
+	for _, param := range params {
+		values.Add(param.Key, param.Value)
+	}
+	resp, err := http.Get(target + "?" + values.Encode())
+	if err != nil {
+		return nil, err
+	}
+
+	return resp, nil
+}
+
+// SetAppConfig Google用Config
+func SetAppConfig() error {
 	jsonString, err := ioutil.ReadFile("appConf.json")
 	if err != nil {
 		return err
@@ -217,7 +350,7 @@ func SetGoogleConfig() error {
 		return err
 	}
 
-	config = oauth2.Config{
+	googleConf = oauth2.Config{
 		ClientID:     appConf.ClientID,
 		ClientSecret: appConf.ClientSecret,
 		Endpoint:     google.Endpoint,
@@ -229,9 +362,7 @@ func SetGoogleConfig() error {
 
 // GetGoogleAuthURL GoogleAuthCodeURLを取得
 func GetGoogleAuthURL() (string, error) {
-	SetGoogleConfig()
-
-	url := config.AuthCodeURL(appConf.AuthCode)
+	url := googleConf.AuthCodeURL(appConf.AuthCode)
 	return url, nil
 }
 
@@ -260,7 +391,6 @@ func InitDB() error {
 	}
 
 	connect := fmt.Sprintf(dbConf.Dsn, dbConf.Username, dbConf.Password, dbConf.Server, dbConf.Database, dbConf.Charset)
-	fmt.Println(dbConf)
 	db, err = sql.Open("mysql", connect)
 
 	if err != nil {

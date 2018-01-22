@@ -7,7 +7,8 @@
     "client_id": "xxxxxxx",
     "client_secret": "xxxxxxx",
     "redirect_url": "xxxxxxx",
-    "auth_code": "xxxxxxx"
+    "auth_code": "xxxxxxx",
+    "cookie_secret": "xxxxxxx"
 }
 ```
 
