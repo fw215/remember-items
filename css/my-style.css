@@ -5,6 +5,9 @@
 .el-main {
     padding: 20px 10px;
 }
+.el-table__empty-block {
+	height: auto;
+}
 
 #main {
     height: 100%;

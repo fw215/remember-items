@@ -1,4 +1,4 @@
-
+ELEMENT.locale(ELEMENT.lang.ja);
 new Vue({
     el: '#main',
     delimiters: ['%%', '%%'],
@@ -18,12 +18,34 @@ new Vue({
         },
         getCategories: function () {
             var self = this;
-            var category = {
-                "category_id": "1",
-                "category_name": "A",
-            }
-            self.categories.push(category);
-            self.categories.push(category);
+            self.error_message = "";
+            axios.get(
+                "/v1/categories"
+            ).then(function (res) {
+                if (res.data.code == 200) {
+                    self.categories = res.data.categories;
+                } else {
+                    self.$alert('エラーが発生しました', 'エラー', {
+                        confirmButtonText: 'OK',
+                        callback: function (action) {
+                            self.$message({
+                                type: 'warning',
+                                message: res.data.error
+                            });
+                        }
+                    });
+                }
+            }).catch(function (error) {
+                self.$alert('通信エラーが発生しました', 'エラー', {
+                    confirmButtonText: 'OK',
+                    callback: function (action) {
+                        self.$message({
+                            type: 'warning',
+                            message: `しばらく時間をおいてから再度お試しください`
+                        });
+                    }
+                });
+            });
         }
     }
 })

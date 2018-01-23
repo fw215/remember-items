@@ -74,7 +74,8 @@ func GinRun() {
 	v1 := router.Group("/v1")
 	{
 		v1.GET("/google/login", v1Login)
-		v1.GET("/google/oauthcallback", v1GoogleOAuth)
+		v1.GET("/google/oauthcallback", v1GoogleCallback)
+		v1.GET("/categories", v1Categories)
 	}
 
 	router.NoRoute(NoRoute)
@@ -90,9 +91,7 @@ func Login(c *gin.Context) {
 
 // Index トップページ
 func Index(c *gin.Context) {
-	err := LoginCheck(c)
-	if err != nil {
-		ClearSession(c)
+	if err := LoginCheck(c); err != nil {
 		c.HTML(200, "Error", gin.H{
 			"title":       "エラーが発生しました｜持ち物管理",
 			"error":       err,
@@ -107,9 +106,7 @@ func Index(c *gin.Context) {
 
 // Items トップページ
 func Items(c *gin.Context) {
-	err := LoginCheck(c)
-	if err != nil {
-		ClearSession(c)
+	if err := LoginCheck(c); err != nil {
 		c.HTML(200, "Error", gin.H{
 			"title":       "エラーが発生しました｜持ち物管理",
 			"error":       err,
@@ -139,8 +136,8 @@ func v1Login(c *gin.Context) {
 	c.Redirect(302, url+"&access_type=offline")
 }
 
-// v1GoogleOAuth Google認証
-func v1GoogleOAuth(c *gin.Context) {
+// v1GoogleCallback Google認証
+func v1GoogleCallback(c *gin.Context) {
 	InitDB()
 	defer db.Close()
 
@@ -166,7 +163,7 @@ func v1GoogleOAuth(c *gin.Context) {
 		return
 	}
 
-	ID, Email, err := GetGoogleInformaion(token)
+	callbackID, Email, err := GetGoogleInformaion(token)
 	if err != nil {
 		c.HTML(200, "Error", gin.H{
 			"title":       "エラーが発生しました｜持ち物管理",
@@ -174,6 +171,17 @@ func v1GoogleOAuth(c *gin.Context) {
 			"description": "10秒後にリダイレクトします...",
 		})
 		return
+	}
+
+	if err := db.QueryRow("SELECT `user_id` FROM `users` WHERE `google_id` = ? LIMIT 1", callbackID).Scan(&userID); err != nil {
+		if err != sql.ErrNoRows {
+			c.HTML(200, "Error", gin.H{
+				"title":       "エラーが発生しました｜持ち物管理",
+				"error":       "データベースエラーが発生しました",
+				"description": "10秒後にリダイレクトします...",
+			})
+			return
+		}
 	}
 
 	transaction, err := db.Begin()
@@ -185,11 +193,15 @@ func v1GoogleOAuth(c *gin.Context) {
 		})
 		return
 	}
-
 	now := time.Now().Format("2006-01-02 15:04:05")
 	Expiry := token.Expiry.Format("2006-01-02 15:04:05")
-	insertSQL := "INSERT INTO `users`(`google_id`, `google_email`, `google_access_token`, `google_expiry`, `google_refresh_token`, `created`, `modified`) VALUES (?,?,?,?,?,?,?)"
-	_, err = transaction.Exec(insertSQL, ID, Email, token.AccessToken, Expiry, token.RefreshToken, now, now)
+	if userID == "" {
+		insertSQL := "INSERT INTO `users`(`google_id`, `google_email`, `google_access_token`, `google_expiry`, `google_refresh_token`, `created`, `modified`) VALUES (?,?,?,?,?,?,?)"
+		_, err = transaction.Exec(insertSQL, callbackID, Email, token.AccessToken, Expiry, token.RefreshToken, now, now)
+	} else {
+		updateSQL := "UPDATE `users` SET `google_access_token` = ?, `google_expiry` = ?, `google_refresh_token` = ?, `modified` = ? WHERE `user_id` = ?"
+		_, err = transaction.Exec(updateSQL, token.AccessToken, Expiry, token.RefreshToken, now, userID)
+	}
 	if err != nil {
 		transaction.Rollback()
 		c.HTML(200, "Error", gin.H{
@@ -206,6 +218,62 @@ func v1GoogleOAuth(c *gin.Context) {
 	session.Save()
 
 	c.Redirect(302, "/")
+}
+
+// v1Categories category一覧
+func v1Categories(c *gin.Context) {
+	if err := LoginCheck(c); err != nil {
+		c.JSON(200, gin.H{
+			"code":  500,
+			"error": "ログインしてください",
+		})
+		return
+	}
+
+	InitDB()
+	defer db.Close()
+
+	if err := db.Ping(); err != nil {
+		c.JSON(200, gin.H{
+			"code":  500,
+			"error": "データベース接続エラーが発生しました",
+		})
+		return
+	}
+
+	rows, err := db.Query("SELECT `category_name`, `modified` FROM `categories` WHERE `user_id` = ?", userID)
+	if err != nil {
+		c.JSON(200, gin.H{
+			"code":  500,
+			"error": "データベースエラーが発生しました",
+		})
+		return
+	}
+	defer rows.Close()
+
+	var list []gin.H
+	var categoryName, modified string
+	for i := 0; rows.Next(); i++ {
+		if err := rows.Scan(&categoryName, &modified); err != nil {
+			c.JSON(200, gin.H{
+				"code":  500,
+				"error": "データベースエラーが発生しました",
+			})
+			return
+		}
+		data := gin.H{
+			"category_name": categoryName,
+			"modified":      modified,
+		}
+		list = append(list, data)
+	}
+
+	c.JSON(200, gin.H{
+		"code":       200,
+		"categories": list,
+	})
+	return
+
 }
 
 // NoRoute (404)Not Foundページ
@@ -229,6 +297,8 @@ type GoogleAccessResponse struct {
 	EmailVerified string `json:"email_verified"`
 	AccessType    string `json:"access_type"`
 }
+
+var userID string
 
 // LoginCheck ログイン状態
 func LoginCheck(c *gin.Context) error {
@@ -265,9 +335,10 @@ func LoginCheck(c *gin.Context) error {
 		return errors.New("データベース接続エラーが発生しました")
 	}
 
-	var userID string
 	if err := db.QueryRow("SELECT user_id FROM users WHERE google_id = ? AND google_access_token = ? LIMIT 1", googleAccessResponse.Sub, accessToken.(string)).Scan(&userID); err != nil {
-		return errors.New("データベース接続エラーが発生しました")
+		if err != sql.ErrNoRows {
+			return errors.New("データベースエラーが発生しました")
+		}
 	}
 	if userID == "" {
 		return errors.New("新規登録してください")
