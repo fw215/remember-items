@@ -50,6 +50,7 @@ func createMyRender() multitemplate.Render {
 	r.AddFromFiles("Login", "./templates/login.html")
 	r.AddFromFiles("Index", "./templates/index.html")
 	r.AddFromFiles("Items", "./templates/items.html")
+	r.AddFromFiles("Error", "./templates/error.html")
 	return r
 }
 
@@ -91,8 +92,12 @@ func Login(c *gin.Context) {
 func Index(c *gin.Context) {
 	err := LoginCheck(c)
 	if err != nil {
-		fmt.Println(err)
-		c.Redirect(302, "/login")
+		ClearSession(c)
+		c.HTML(200, "Error", gin.H{
+			"title":       "エラーが発生しました｜持ち物管理",
+			"error":       err,
+			"description": "10秒後にリダイレクトします...",
+		})
 		return
 	}
 	c.HTML(200, "Index", gin.H{
@@ -104,8 +109,12 @@ func Index(c *gin.Context) {
 func Items(c *gin.Context) {
 	err := LoginCheck(c)
 	if err != nil {
-		fmt.Println(err)
-		c.Redirect(302, "/login")
+		ClearSession(c)
+		c.HTML(200, "Error", gin.H{
+			"title":       "エラーが発生しました｜持ち物管理",
+			"error":       err,
+			"description": "10秒後にリダイレクトします...",
+		})
 		return
 	}
 	c.HTML(200, "Items", gin.H{
@@ -119,9 +128,10 @@ func v1Login(c *gin.Context) {
 
 	url, err := GetGoogleAuthURL()
 	if err != nil {
-		c.JSON(200, gin.H{
-			"code":    500,
-			"message": "システムエラーが発生中です",
+		c.HTML(200, "Error", gin.H{
+			"title":       "エラーが発生しました｜持ち物管理",
+			"error":       "システムエラーが発生中です",
+			"description": "10秒後にリダイレクトします...",
 		})
 		return
 	}
@@ -134,11 +144,11 @@ func v1GoogleOAuth(c *gin.Context) {
 	InitDB()
 	defer db.Close()
 
-	err := db.Ping()
-	if err != nil {
-		c.JSON(200, gin.H{
-			"code":    500,
-			"message": "データベース接続エラーが発生しました",
+	if err := db.Ping(); err != nil {
+		c.HTML(200, "Error", gin.H{
+			"title":       "エラーが発生しました｜持ち物管理",
+			"error":       "データベース接続エラーが発生しました",
+			"description": "10秒後にリダイレクトします...",
 		})
 		return
 	}
@@ -148,27 +158,30 @@ func v1GoogleOAuth(c *gin.Context) {
 
 	token, err := GetGoogleCallback(code, state)
 	if err != nil {
-		c.JSON(200, gin.H{
-			"code":    500,
-			"message": "認証に失敗しました",
+		c.HTML(200, "Error", gin.H{
+			"title":       "エラーが発生しました｜持ち物管理",
+			"error":       "認証に失敗しました",
+			"description": "10秒後にリダイレクトします...",
 		})
 		return
 	}
 
 	ID, Email, err := GetGoogleInformaion(token)
 	if err != nil {
-		c.JSON(200, gin.H{
-			"code":    500,
-			"message": "認証に失敗しました",
+		c.HTML(200, "Error", gin.H{
+			"title":       "エラーが発生しました｜持ち物管理",
+			"error":       "認証に失敗しました",
+			"description": "10秒後にリダイレクトします...",
 		})
 		return
 	}
 
 	transaction, err := db.Begin()
 	if err != nil {
-		c.JSON(200, gin.H{
-			"code":    500,
-			"message": "データベース接続エラーが発生しました",
+		c.HTML(200, "Error", gin.H{
+			"title":       "エラーが発生しました｜持ち物管理",
+			"error":       "データベースエラーが発生しました",
+			"description": "10秒後にリダイレクトします...",
 		})
 		return
 	}
@@ -179,9 +192,10 @@ func v1GoogleOAuth(c *gin.Context) {
 	_, err = transaction.Exec(insertSQL, ID, Email, token.AccessToken, Expiry, token.RefreshToken, now, now)
 	if err != nil {
 		transaction.Rollback()
-		c.JSON(200, gin.H{
-			"code":    500,
-			"message": "データベース接続エラーが発生しました",
+		c.HTML(200, "Error", gin.H{
+			"title":       "エラーが発生しました｜持ち物管理",
+			"error":       "データベースエラーが発生しました",
+			"description": "10秒後にリダイレクトします...",
 		})
 		return
 	}
@@ -196,8 +210,10 @@ func v1GoogleOAuth(c *gin.Context) {
 
 // NoRoute (404)Not Foundページ
 func NoRoute(c *gin.Context) {
-	c.JSON(404, gin.H{
-		"title": "Not Found",
+	c.HTML(404, "Error", gin.H{
+		"title":       "ページが見つかりません",
+		"error":       "ページが見つかりません",
+		"description": "10秒後にリダイレクトします...",
 	})
 }
 
