@@ -24,7 +24,7 @@
 
                 <el-row>
                     <el-col :span="24">
-                        <el-button type="primary" plain>カテゴリ追加</el-button>
+                        <el-button type="primary" @click="categoryModalVisible = true" plain>カテゴリ追加</el-button>
                     </el-col>
                     <el-col :span="24">
                         <el-table :data="categories" stripe style="width: 100%">
@@ -40,6 +40,18 @@
                         </el-table>
                     </el-col>
                 </el-row>
+
+                <el-dialog title="カテゴリ名を入力してください" width="90%" :visible.sync="categoryModalVisible">
+                    <el-form :model="category" required>
+                        <el-form-item label="カテゴリ名" :label-width="formLabelWidth">
+                            <el-input v-model="category.category_name" auto-complete="off"></el-input>
+                        </el-form-item>
+                    </el-form>
+                    <span slot="footer" class="dialog-footer">
+                        <el-button @click="categoryModalVisible = false">閉じる</el-button>
+                        <el-button type="primary" @click="addCategory()">登録する</el-button>
+                    </span>
+                </el-dialog>
 
             </el-main>
         </div>

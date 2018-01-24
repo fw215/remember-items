@@ -76,6 +76,8 @@ func GinRun() {
 		v1.GET("/google/login", v1Login)
 		v1.GET("/google/oauthcallback", v1GoogleCallback)
 		v1.GET("/categories", v1Categories)
+		v1.GET("/category", v1CategoryGET)
+		v1.POST("/category", v1CategoryPOST)
 	}
 
 	router.NoRoute(NoRoute)
@@ -84,6 +86,8 @@ func GinRun() {
 
 // Login ログイン
 func Login(c *gin.Context) {
+	ClearSession(c)
+
 	c.HTML(200, "Login", gin.H{
 		"title": "ログイン｜持ち物管理",
 	})
@@ -95,7 +99,7 @@ func Index(c *gin.Context) {
 		c.HTML(200, "Error", gin.H{
 			"title":       "エラーが発生しました｜持ち物管理",
 			"error":       err,
-			"description": "10秒後にリダイレクトします...",
+			"description": "5秒後にリダイレクトします...",
 		})
 		return
 	}
@@ -110,7 +114,7 @@ func Items(c *gin.Context) {
 		c.HTML(200, "Error", gin.H{
 			"title":       "エラーが発生しました｜持ち物管理",
 			"error":       err,
-			"description": "10秒後にリダイレクトします...",
+			"description": "5秒後にリダイレクトします...",
 		})
 		return
 	}
@@ -122,13 +126,12 @@ func Items(c *gin.Context) {
 // v1Login ログイン
 func v1Login(c *gin.Context) {
 	ClearSession(c)
-
 	url, err := GetGoogleAuthURL()
 	if err != nil {
 		c.HTML(200, "Error", gin.H{
 			"title":       "エラーが発生しました｜持ち物管理",
 			"error":       "システムエラーが発生中です",
-			"description": "10秒後にリダイレクトします...",
+			"description": "5秒後にリダイレクトします...",
 		})
 		return
 	}
@@ -145,7 +148,7 @@ func v1GoogleCallback(c *gin.Context) {
 		c.HTML(200, "Error", gin.H{
 			"title":       "エラーが発生しました｜持ち物管理",
 			"error":       "データベース接続エラーが発生しました",
-			"description": "10秒後にリダイレクトします...",
+			"description": "5秒後にリダイレクトします...",
 		})
 		return
 	}
@@ -158,7 +161,7 @@ func v1GoogleCallback(c *gin.Context) {
 		c.HTML(200, "Error", gin.H{
 			"title":       "エラーが発生しました｜持ち物管理",
 			"error":       "認証に失敗しました",
-			"description": "10秒後にリダイレクトします...",
+			"description": "5秒後にリダイレクトします...",
 		})
 		return
 	}
@@ -168,7 +171,7 @@ func v1GoogleCallback(c *gin.Context) {
 		c.HTML(200, "Error", gin.H{
 			"title":       "エラーが発生しました｜持ち物管理",
 			"error":       "認証に失敗しました",
-			"description": "10秒後にリダイレクトします...",
+			"description": "5秒後にリダイレクトします...",
 		})
 		return
 	}
@@ -178,7 +181,7 @@ func v1GoogleCallback(c *gin.Context) {
 			c.HTML(200, "Error", gin.H{
 				"title":       "エラーが発生しました｜持ち物管理",
 				"error":       "データベースエラーが発生しました",
-				"description": "10秒後にリダイレクトします...",
+				"description": "5秒後にリダイレクトします...",
 			})
 			return
 		}
@@ -189,7 +192,7 @@ func v1GoogleCallback(c *gin.Context) {
 		c.HTML(200, "Error", gin.H{
 			"title":       "エラーが発生しました｜持ち物管理",
 			"error":       "データベースエラーが発生しました",
-			"description": "10秒後にリダイレクトします...",
+			"description": "5秒後にリダイレクトします...",
 		})
 		return
 	}
@@ -207,7 +210,7 @@ func v1GoogleCallback(c *gin.Context) {
 		c.HTML(200, "Error", gin.H{
 			"title":       "エラーが発生しました｜持ち物管理",
 			"error":       "データベースエラーが発生しました",
-			"description": "10秒後にリダイレクトします...",
+			"description": "5秒後にリダイレクトします...",
 		})
 		return
 	}
@@ -241,7 +244,7 @@ func v1Categories(c *gin.Context) {
 		return
 	}
 
-	rows, err := db.Query("SELECT `category_name`, `modified` FROM `categories` WHERE `user_id` = ?", userID)
+	rows, err := db.Query("SELECT `category_id`, `category_name`, `modified` FROM `categories` WHERE `user_id` = ?", userID)
 	if err != nil {
 		c.JSON(200, gin.H{
 			"code":  500,
@@ -252,9 +255,9 @@ func v1Categories(c *gin.Context) {
 	defer rows.Close()
 
 	var list []gin.H
-	var categoryName, modified string
+	var categoryID, categoryName, modified string
 	for i := 0; rows.Next(); i++ {
-		if err := rows.Scan(&categoryName, &modified); err != nil {
+		if err := rows.Scan(&categoryID, &categoryName, &modified); err != nil {
 			c.JSON(200, gin.H{
 				"code":  500,
 				"error": "データベースエラーが発生しました",
@@ -262,6 +265,7 @@ func v1Categories(c *gin.Context) {
 			return
 		}
 		data := gin.H{
+			"category_id":   categoryID,
 			"category_name": categoryName,
 			"modified":      modified,
 		}
@@ -273,7 +277,49 @@ func v1Categories(c *gin.Context) {
 		"categories": list,
 	})
 	return
+}
 
+// v1Category category詳細
+func v1CategoryGET(c *gin.Context) {
+	if err := LoginCheck(c); err != nil {
+		c.JSON(200, gin.H{
+			"code":  500,
+			"error": "ログインしてください",
+		})
+		return
+	}
+}
+
+// v1Category category登録更新
+func v1CategoryPOST(c *gin.Context) {
+	if err := LoginCheck(c); err != nil {
+		c.JSON(200, gin.H{
+			"code":  500,
+			"error": "ログインしてください",
+		})
+		return
+	}
+
+	CategoryID := c.PostForm("category_id")
+	CategoryName := c.PostForm("category_name")
+
+	var resError []string
+	if CategoryName == "" {
+		resError = append(resError, "カテゴリ名を入力してください")
+	}
+	if len(resError) > 0 {
+		c.JSON(200, gin.H{
+			"code":   300,
+			"errors": resError,
+		})
+		return
+	}
+
+	c.JSON(200, gin.H{
+		"code":         200,
+		"categoryID":   CategoryID,
+		"categoryName": CategoryName,
+	})
 }
 
 // NoRoute (404)Not Foundページ
@@ -281,7 +327,7 @@ func NoRoute(c *gin.Context) {
 	c.HTML(404, "Error", gin.H{
 		"title":       "ページが見つかりません",
 		"error":       "ページが見つかりません",
-		"description": "10秒後にリダイレクトします...",
+		"description": "5秒後にリダイレクトします...",
 	})
 }
 
@@ -341,7 +387,7 @@ func LoginCheck(c *gin.Context) error {
 		}
 	}
 	if userID == "" {
-		return errors.New("新規登録してください")
+		return errors.New("ログインしてください")
 	}
 
 	return nil

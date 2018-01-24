@@ -5,7 +5,7 @@ new Vue({
     data() {
         return {
             activeIndex: '1',
-            redirectTime: 10
+            redirectTime: 5
         };
     },
     created: function () {

@@ -4,8 +4,8 @@ import (
 	"testing"
 )
 
-func Test_SetGoogleConfig(t *testing.T) {
-	err := SetGoogleConfig()
+func Test_SetAppConfig(t *testing.T) {
+	err := SetAppConfig()
 	if err != nil {
 		t.Error(err)
 	} else {
