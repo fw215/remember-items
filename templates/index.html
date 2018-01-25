@@ -30,7 +30,7 @@
                         <el-table :data="categories" stripe style="width: 100%">
                             <el-table-column prop="category_name" label="カテゴリ">
                             </el-table-column>
-                            <el-table-column label="">
+                            <el-table-column>
                                 <template slot-scope="scope">
                                     <el-button type="primary" class="btn-edit" round @click="goEdit(scope.row.category_id)">
                                         <i class="fa fa-pencil-square-o" aria-hidden="true"></i>

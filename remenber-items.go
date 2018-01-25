@@ -315,10 +315,57 @@ func v1CategoryPOST(c *gin.Context) {
 		return
 	}
 
+	InitDB()
+	defer db.Close()
+
+	if err := db.Ping(); err != nil {
+		c.JSON(200, gin.H{
+			"code":  500,
+			"error": "データベース接続エラーが発生しました",
+		})
+		return
+	}
+
+	var updateID string
+	if err := db.QueryRow("SELECT `category_id` FROM `categories` WHERE `category_id` = ? AND `user_id` = ? LIMIT 1", CategoryID, userID).Scan(&updateID); err != nil {
+		if err != sql.ErrNoRows {
+			c.JSON(200, gin.H{
+				"code":   500,
+				"errors": "データベースエラーが発生しました",
+			})
+			return
+		}
+	}
+
+	transaction, err := db.Begin()
+	if err != nil {
+		c.JSON(200, gin.H{
+			"code":   500,
+			"errors": "データベースエラーが発生しました",
+		})
+		return
+	}
+	now := time.Now().Format("2006-01-02 15:04:05")
+
+	if updateID == "" {
+		insertSQL := "INSERT INTO `categories`(`user_id`, `category_name`, `created`, `modified`) VALUES (?,?,?,?)"
+		_, err = transaction.Exec(insertSQL, userID, CategoryName, now, now)
+	} else {
+		updateSQL := "UPDATE `categories` SET `category_name` = ?, `modified` = ? WHERE `category_id` = ? AND `user_id` = ? "
+		_, err = transaction.Exec(updateSQL, CategoryName, now, updateID, userID)
+	}
+	if err != nil {
+		transaction.Rollback()
+		c.JSON(200, gin.H{
+			"code":   500,
+			"errors": "データベースエラーが発生しました",
+		})
+		return
+	}
+	transaction.Commit()
+
 	c.JSON(200, gin.H{
-		"code":         200,
-		"categoryID":   CategoryID,
-		"categoryName": CategoryName,
+		"code": 200,
 	})
 }
 
