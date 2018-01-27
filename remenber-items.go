@@ -70,14 +70,17 @@ func GinRun() {
 
 	router.GET("/", Index)
 	router.GET("/login", Login)
-	router.GET("/items", Items)
+	router.GET("/items/:CategoryID", Items)
 	v1 := router.Group("/v1")
 	{
 		v1.GET("/google/login", v1Login)
 		v1.GET("/google/oauthcallback", v1GoogleCallback)
 		v1.GET("/categories", v1Categories)
-		v1.GET("/category", v1CategoryGET)
+		v1.GET("/category/:CategoryID", v1CategoryGET)
 		v1.POST("/category", v1CategoryPOST)
+		v1.GET("/items/:CategoryID", v1Items)
+		v1.GET("/item/:ItemID", v1ItemGET)
+		v1.POST("/item", v1ItemPOST)
 	}
 
 	router.NoRoute(NoRoute)
@@ -89,7 +92,7 @@ func Login(c *gin.Context) {
 	ClearSession(c)
 
 	c.HTML(200, "Login", gin.H{
-		"title": "ログイン｜持ち物管理",
+		"title": "ログイン｜アイテム管理",
 	})
 }
 
@@ -97,14 +100,14 @@ func Login(c *gin.Context) {
 func Index(c *gin.Context) {
 	if err := LoginCheck(c); err != nil {
 		c.HTML(200, "Error", gin.H{
-			"title":       "エラーが発生しました｜持ち物管理",
+			"title":       "エラーが発生しました｜アイテム管理",
 			"error":       err,
 			"description": "5秒後にリダイレクトします...",
 		})
 		return
 	}
 	c.HTML(200, "Index", gin.H{
-		"title": "持ち物管理",
+		"title": "アイテム管理",
 	})
 }
 
@@ -112,14 +115,17 @@ func Index(c *gin.Context) {
 func Items(c *gin.Context) {
 	if err := LoginCheck(c); err != nil {
 		c.HTML(200, "Error", gin.H{
-			"title":       "エラーが発生しました｜持ち物管理",
+			"title":       "エラーが発生しました｜アイテム管理",
 			"error":       err,
 			"description": "5秒後にリダイレクトします...",
 		})
 		return
 	}
+
+	CategoryID := c.Param("CategoryID")
 	c.HTML(200, "Items", gin.H{
-		"title": "持ち物管理",
+		"title":      "アイテム管理",
+		"CategoryID": CategoryID,
 	})
 }
 
@@ -129,7 +135,7 @@ func v1Login(c *gin.Context) {
 	url, err := GetGoogleAuthURL()
 	if err != nil {
 		c.HTML(200, "Error", gin.H{
-			"title":       "エラーが発生しました｜持ち物管理",
+			"title":       "エラーが発生しました｜アイテム管理",
 			"error":       "システムエラーが発生中です",
 			"description": "5秒後にリダイレクトします...",
 		})
@@ -146,7 +152,7 @@ func v1GoogleCallback(c *gin.Context) {
 
 	if err := db.Ping(); err != nil {
 		c.HTML(200, "Error", gin.H{
-			"title":       "エラーが発生しました｜持ち物管理",
+			"title":       "エラーが発生しました｜アイテム管理",
 			"error":       "データベース接続エラーが発生しました",
 			"description": "5秒後にリダイレクトします...",
 		})
@@ -159,7 +165,7 @@ func v1GoogleCallback(c *gin.Context) {
 	token, err := GetGoogleCallback(code, state)
 	if err != nil {
 		c.HTML(200, "Error", gin.H{
-			"title":       "エラーが発生しました｜持ち物管理",
+			"title":       "エラーが発生しました｜アイテム管理",
 			"error":       "認証に失敗しました",
 			"description": "5秒後にリダイレクトします...",
 		})
@@ -169,7 +175,7 @@ func v1GoogleCallback(c *gin.Context) {
 	callbackID, Email, err := GetGoogleInformaion(token)
 	if err != nil {
 		c.HTML(200, "Error", gin.H{
-			"title":       "エラーが発生しました｜持ち物管理",
+			"title":       "エラーが発生しました｜アイテム管理",
 			"error":       "認証に失敗しました",
 			"description": "5秒後にリダイレクトします...",
 		})
@@ -179,7 +185,7 @@ func v1GoogleCallback(c *gin.Context) {
 	if err := db.QueryRow("SELECT `user_id` FROM `users` WHERE `google_id` = ? LIMIT 1", callbackID).Scan(&userID); err != nil {
 		if err != sql.ErrNoRows {
 			c.HTML(200, "Error", gin.H{
-				"title":       "エラーが発生しました｜持ち物管理",
+				"title":       "エラーが発生しました｜アイテム管理",
 				"error":       "データベースエラーが発生しました",
 				"description": "5秒後にリダイレクトします...",
 			})
@@ -190,7 +196,7 @@ func v1GoogleCallback(c *gin.Context) {
 	transaction, err := db.Begin()
 	if err != nil {
 		c.HTML(200, "Error", gin.H{
-			"title":       "エラーが発生しました｜持ち物管理",
+			"title":       "エラーが発生しました｜アイテム管理",
 			"error":       "データベースエラーが発生しました",
 			"description": "5秒後にリダイレクトします...",
 		})
@@ -208,7 +214,7 @@ func v1GoogleCallback(c *gin.Context) {
 	if err != nil {
 		transaction.Rollback()
 		c.HTML(200, "Error", gin.H{
-			"title":       "エラーが発生しました｜持ち物管理",
+			"title":       "エラーが発生しました｜アイテム管理",
 			"error":       "データベースエラーが発生しました",
 			"description": "5秒後にリダイレクトします...",
 		})
@@ -288,6 +294,43 @@ func v1CategoryGET(c *gin.Context) {
 		})
 		return
 	}
+
+	CategoryID := c.Param("CategoryID")
+
+	InitDB()
+	defer db.Close()
+
+	if err := db.Ping(); err != nil {
+		c.JSON(200, gin.H{
+			"code":  500,
+			"error": "データベース接続エラーが発生しました",
+		})
+		return
+	}
+
+	var CategoryName string
+	if err := db.QueryRow("SELECT `category_name` FROM `categories` WHERE `category_id` = ? AND `user_id` = ? LIMIT 1", CategoryID, userID).Scan(&CategoryName); err != nil {
+		if err == sql.ErrNoRows {
+			c.JSON(200, gin.H{
+				"code":   500,
+				"errors": "カテゴリが見つかりませんでした",
+			})
+		} else {
+			c.JSON(200, gin.H{
+				"code":   500,
+				"errors": "データベースエラーが発生しました",
+			})
+		}
+		return
+	}
+
+	c.JSON(200, gin.H{
+		"code": 200,
+		"category": gin.H{
+			"category_id":   CategoryID,
+			"category_name": CategoryName,
+		},
+	})
 }
 
 // v1Category category登録更新
@@ -353,6 +396,193 @@ func v1CategoryPOST(c *gin.Context) {
 	} else {
 		updateSQL := "UPDATE `categories` SET `category_name` = ?, `modified` = ? WHERE `category_id` = ? AND `user_id` = ? "
 		_, err = transaction.Exec(updateSQL, CategoryName, now, updateID, userID)
+	}
+	if err != nil {
+		transaction.Rollback()
+		c.JSON(200, gin.H{
+			"code":   500,
+			"errors": "データベースエラーが発生しました",
+		})
+		return
+	}
+	transaction.Commit()
+
+	c.JSON(200, gin.H{
+		"code": 200,
+	})
+}
+
+// v1Items category詳細
+func v1Items(c *gin.Context) {
+	if err := LoginCheck(c); err != nil {
+		c.JSON(200, gin.H{
+			"code":  500,
+			"error": "ログインしてください",
+		})
+		return
+	}
+
+	InitDB()
+	defer db.Close()
+
+	if err := db.Ping(); err != nil {
+		c.JSON(200, gin.H{
+			"code":  500,
+			"error": "データベース接続エラーが発生しました",
+		})
+		return
+	}
+
+	CategoryID := c.Param("CategoryID")
+	rows, err := db.Query("SELECT `item_id`, `item_name`, `item_image`, `modified` FROM `items` WHERE `category_id` = ? AND `user_id` = ?", CategoryID, userID)
+	if err != nil {
+		c.JSON(200, gin.H{
+			"code":  500,
+			"error": "データベースエラーが発生しました",
+		})
+		return
+	}
+	defer rows.Close()
+
+	var list []gin.H
+	var itemID, itemName, itemImage, modified string
+	for i := 0; rows.Next(); i++ {
+		if err := rows.Scan(&itemID, &itemName, &itemImage, &modified); err != nil {
+			c.JSON(200, gin.H{
+				"code":  500,
+				"error": "データベースエラーが発生しました",
+			})
+			return
+		}
+		data := gin.H{
+			"item_id":    itemID,
+			"item_name":  itemName,
+			"item_image": itemImage,
+			"modified":   modified,
+		}
+		list = append(list, data)
+	}
+
+	c.JSON(200, gin.H{
+		"code":  200,
+		"items": list,
+	})
+}
+
+// v1ItemGET items詳細
+func v1ItemGET(c *gin.Context) {
+	if err := LoginCheck(c); err != nil {
+		c.JSON(200, gin.H{
+			"code":  500,
+			"error": "ログインしてください",
+		})
+		return
+	}
+
+	ItemID := c.Param("ItemID")
+
+	InitDB()
+	defer db.Close()
+
+	if err := db.Ping(); err != nil {
+		c.JSON(200, gin.H{
+			"code":  500,
+			"error": "データベース接続エラーが発生しました",
+		})
+		return
+	}
+
+	var ItemName, ItemImage string
+	if err := db.QueryRow("SELECT `item_name`, `item_image` FROM `items` WHERE `item_id` = ? AND `user_id` = ? LIMIT 1", ItemID, userID).Scan(&ItemName, &ItemImage); err != nil {
+		if err == sql.ErrNoRows {
+			c.JSON(200, gin.H{
+				"code":   500,
+				"errors": "アイテムが見つかりませんでした",
+			})
+		} else {
+			c.JSON(200, gin.H{
+				"code":   500,
+				"errors": "データベースエラーが発生しました",
+			})
+		}
+		return
+	}
+
+	c.JSON(200, gin.H{
+		"code": 200,
+		"item": gin.H{
+			"item_id":    ItemID,
+			"item_name":  ItemName,
+			"item_image": ItemImage,
+		},
+	})
+}
+
+// v1ItemPOST item登録
+func v1ItemPOST(c *gin.Context) {
+	if err := LoginCheck(c); err != nil {
+		c.JSON(200, gin.H{
+			"code":  500,
+			"error": "ログインしてください",
+		})
+		return
+	}
+
+	CategoryID := c.PostForm("category_id")
+	ItemID := c.PostForm("item_id")
+	ItemName := c.PostForm("item_name")
+	ItemImage := c.PostForm("item_image")
+
+	var resError []string
+	if ItemName == "" {
+		resError = append(resError, "アイテム名を入力してください")
+	}
+	if len(resError) > 0 {
+		c.JSON(200, gin.H{
+			"code":   300,
+			"errors": resError,
+		})
+		return
+	}
+
+	InitDB()
+	defer db.Close()
+
+	if err := db.Ping(); err != nil {
+		c.JSON(200, gin.H{
+			"code":  500,
+			"error": "データベース接続エラーが発生しました",
+		})
+		return
+	}
+
+	var updateID string
+	if err := db.QueryRow("SELECT `item_id` FROM `items` WHERE `category_id` = ? AND `item_id` = ? AND `user_id` = ? LIMIT 1", CategoryID, ItemID, userID).Scan(&updateID); err != nil {
+		if err != sql.ErrNoRows {
+			c.JSON(200, gin.H{
+				"code":   500,
+				"errors": "データベースエラーが発生しました",
+			})
+			return
+		}
+	}
+
+	transaction, err := db.Begin()
+	if err != nil {
+		c.JSON(200, gin.H{
+			"code":   500,
+			"errors": "データベースエラーが発生しました",
+		})
+		return
+	}
+	now := time.Now().Format("2006-01-02 15:04:05")
+
+	if updateID == "" {
+		insertSQL := "INSERT INTO `items`(`user_id`, `category_id`, `item_name`, `item_image`, `created`, `modified`) VALUES (?,?,?,?,?,?)"
+		_, err = transaction.Exec(insertSQL, userID, CategoryID, ItemName, ItemImage, now, now)
+	} else {
+		updateSQL := "UPDATE `items` SET `item_name` = ?, `item_image` = ?, `modified` = ? WHERE `item_id` = ? AND `user_id` = ? AND `category_id` = ? "
+		_, err = transaction.Exec(updateSQL, ItemName, ItemImage, now, updateID, userID, CategoryID)
 	}
 	if err != nil {
 		transaction.Rollback()

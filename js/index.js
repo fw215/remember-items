@@ -51,7 +51,7 @@ new Vue({
             });
         },
         goEdit: function (id) {
-            location.href = "/items?id=" + id;
+            location.href = "/items/" + id;
         },
         getCategories: function () {
             var self = this;

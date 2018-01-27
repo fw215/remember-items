@@ -1,3 +1,9 @@
+/* items */
+
+[v-cloak] {
+	display: none;
+}
+
 .el-header {
     padding: 0 10px;
     font-weight: bold;
@@ -30,4 +36,33 @@
 }
 #main .btn-edit {
     float: right;
+}
+
+#btn-item-add {
+    margin-top: 10px;
+}
+#add-image {
+    display: none;
+}
+#add-image-label {
+    border: 1px dashed #d9d9d9;
+    border-radius: 6px;
+    cursor: pointer;
+    position: relative;
+    overflow: hidden;
+    width: 100px;
+    height: 100px;
+    display:block;
+    line-height: 100px;
+    text-align: center;
+}
+#add-image-label:hover {
+    border-color: #409EFF;
+}
+#preview-image {
+    width: 100%;
+}
+#preview-image img{
+    max-width: 100px;
+    max-height: 100px;
 }

@@ -1,5 +1,5 @@
 # remenber-items
-持ち物管理
+アイテム管理
 
 ## Create appConf.json
 ```
