@@ -99,6 +99,7 @@ func Login(c *gin.Context) {
 // Index トップページ
 func Index(c *gin.Context) {
 	if err := LoginCheck(c); err != nil {
+		ClearSession(c)
 		c.HTML(200, "Error", gin.H{
 			"title":       "エラーが発生しました｜アイテム管理",
 			"error":       err,
@@ -114,6 +115,7 @@ func Index(c *gin.Context) {
 // Items トップページ
 func Items(c *gin.Context) {
 	if err := LoginCheck(c); err != nil {
+		ClearSession(c)
 		c.HTML(200, "Error", gin.H{
 			"title":       "エラーが発生しました｜アイテム管理",
 			"error":       err,
@@ -182,6 +184,7 @@ func v1GoogleCallback(c *gin.Context) {
 		return
 	}
 
+	userID = ""
 	if err := db.QueryRow("SELECT `user_id` FROM `users` WHERE `google_id` = ? LIMIT 1", callbackID).Scan(&userID); err != nil {
 		if err != sql.ErrNoRows {
 			c.HTML(200, "Error", gin.H{
@@ -208,8 +211,13 @@ func v1GoogleCallback(c *gin.Context) {
 		insertSQL := "INSERT INTO `users`(`google_id`, `google_email`, `google_access_token`, `google_expiry`, `google_refresh_token`, `created`, `modified`) VALUES (?,?,?,?,?,?,?)"
 		_, err = transaction.Exec(insertSQL, callbackID, Email, token.AccessToken, Expiry, token.RefreshToken, now, now)
 	} else {
-		updateSQL := "UPDATE `users` SET `google_access_token` = ?, `google_expiry` = ?, `google_refresh_token` = ?, `modified` = ? WHERE `user_id` = ?"
-		_, err = transaction.Exec(updateSQL, token.AccessToken, Expiry, token.RefreshToken, now, userID)
+		if token.RefreshToken == "" {
+			updateSQL := "UPDATE `users` SET `google_access_token` = ?, `google_expiry` = ?, `modified` = ? WHERE `user_id` = ?"
+			_, err = transaction.Exec(updateSQL, token.AccessToken, Expiry, now, userID)
+		} else {
+			updateSQL := "UPDATE `users` SET `google_access_token` = ?, `google_expiry` = ?, `google_refresh_token` = ?, `modified` = ? WHERE `user_id` = ?"
+			_, err = transaction.Exec(updateSQL, token.AccessToken, Expiry, token.RefreshToken, now, userID)
+		}
 	}
 	if err != nil {
 		transaction.Rollback()
@@ -621,6 +629,14 @@ type GoogleAccessResponse struct {
 	AccessType    string `json:"access_type"`
 }
 
+// GoogleRefreshResponse リフレッシュトークン
+type GoogleRefreshResponse struct {
+	AccessToken string `json:"access_token"`
+	ToeknType   string `json:"token_type"`
+	ExpiresIn   int    `json:"expires_in"`
+	IDToken     string `json:"id_token"`
+}
+
 var userID string
 
 // LoginCheck ログイン状態
@@ -628,6 +644,24 @@ func LoginCheck(c *gin.Context) error {
 	session := sessions.Default(c)
 	accessToken := session.Get("accessToken")
 	if accessToken == nil {
+		return errors.New("ログインしてください")
+	}
+
+	InitDB()
+	defer db.Close()
+
+	if err := db.Ping(); err != nil {
+		return errors.New("データベース接続エラーが発生しました")
+	}
+
+	userID = ""
+	var googleRefreshToken string
+	if err := db.QueryRow("SELECT `user_id`, `google_refresh_token` FROM `users` WHERE `google_access_token` = ? LIMIT 1", accessToken.(string)).Scan(&userID, &googleRefreshToken); err != nil {
+		if err != sql.ErrNoRows {
+			return errors.New("データベースエラーが発生しました")
+		}
+	}
+	if userID == "" {
 		return errors.New("ログインしてください")
 	}
 
@@ -648,46 +682,62 @@ func LoginCheck(c *gin.Context) error {
 		return err
 	}
 	if googleAccessResponse.Sub == "" {
-		return errors.New("アクセストークンの有効期限が切れています")
-	}
+		// アクセストークンの有効期限が切れているのでリフレッシュトークンで新しいアクセストークンを取得
+		if googleRefreshToken != "" {
+			var refreshParams []HTTPParam
+			refreshParams = append(refreshParams, HTTPParam{
+				Key:   "client_id",
+				Value: appConf.ClientID,
+			})
+			refreshParams = append(refreshParams, HTTPParam{
+				Key:   "client_secret",
+				Value: appConf.ClientSecret,
+			})
+			refreshParams = append(refreshParams, HTTPParam{
+				Key:   "refresh_token",
+				Value: googleRefreshToken,
+			})
+			refreshParams = append(refreshParams, HTTPParam{
+				Key:   "grant_type",
+				Value: "refresh_token",
+			})
+			refreshResp, err := RequestPOST("https://www.googleapis.com/oauth2/v4/token", refreshParams)
+			if err != nil {
+				return err
+			}
+			defer refreshResp.Body.Close()
 
-	InitDB()
-	defer db.Close()
+			var googleRefreshResponse GoogleRefreshResponse
+			if err := json.NewDecoder(refreshResp.Body).Decode(&googleRefreshResponse); err != nil {
+				return err
+			}
+			if googleRefreshResponse.AccessToken == "" {
+				return errors.New("ログインしてください")
+			}
+			transaction, err := db.Begin()
+			if err != nil {
+				return errors.New("データベースエラーが発生しました")
+			}
+			now := time.Now().Format("2006-01-02 15:04:05")
 
-	if err = db.Ping(); err != nil {
-		return errors.New("データベース接続エラーが発生しました")
-	}
+			updateSQL := "UPDATE `users` SET `google_access_token` = ?, `modified` = ? WHERE `user_id` = ?"
+			_, err = transaction.Exec(updateSQL, googleRefreshResponse.AccessToken, now, userID)
 
-	if err := db.QueryRow("SELECT user_id FROM users WHERE google_id = ? AND google_access_token = ? LIMIT 1", googleAccessResponse.Sub, accessToken.(string)).Scan(&userID); err != nil {
-		if err != sql.ErrNoRows {
-			return errors.New("データベースエラーが発生しました")
+			if err != nil {
+				transaction.Rollback()
+				return errors.New("データベースエラーが発生しました")
+			}
+			transaction.Commit()
+
+			session.Set("accessToken", googleRefreshResponse.AccessToken)
+			session.Save()
+		} else {
+			// リフレッシュトークンがないので再ログイン
+			return errors.New("アクセストークンの有効期限が切れています<br>ログインしてください")
 		}
-	}
-	if userID == "" {
-		return errors.New("ログインしてください")
 	}
 
 	return nil
-
-	// urlValue := url.Values{
-	// 	"client_id":     {appConf.ClientID},
-	// 	"client_secret": {appConf.ClientSecret},
-	// 	"refresh_token": {"xxxxxxxxxxxxxxxxxxxxxxx"},
-	// 	"grant_type":    {"refresh_token"},
-	// }
-
-	// resp, err = http.PostForm("https://www.googleapis.com/oauth2/v4/token", urlValue)
-	// if err != nil {
-	// 	log.Panic("Error when renew token %v", err)
-	// }
-
-	// body, err := ioutil.ReadAll(resp.Body)
-	// resp.Body.Close()
-	// if err != nil {
-	// 	log.Fatal(err)
-	// }
-
-	// fmt.Printf("\n%s\n", body)
 }
 
 // ClearSession セッションクリア
@@ -707,7 +757,7 @@ func GetGoogleCallback(code, state string) (*oauth2.Token, error) {
 	}
 
 	if appConf.AuthCode != state {
-		return nil, err
+		return nil, errors.New("不正なアクセスです")
 	}
 
 	if token.Valid() == false {
@@ -742,6 +792,20 @@ func RequestGET(target string, params []HTTPParam) (*http.Response, error) {
 		values.Add(param.Key, param.Value)
 	}
 	resp, err := http.Get(target + "?" + values.Encode())
+	if err != nil {
+		return nil, err
+	}
+
+	return resp, nil
+}
+
+// RequestPOST POSTリクエスト
+func RequestPOST(target string, params []HTTPParam) (*http.Response, error) {
+	values := url.Values{}
+	for _, param := range params {
+		values.Add(param.Key, param.Value)
+	}
+	resp, err := http.PostForm(target, values)
 	if err != nil {
 		return nil, err
 	}
