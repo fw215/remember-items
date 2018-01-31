@@ -24,7 +24,7 @@
                 <el-row>
                     <el-col :span="24">
                         <el-input placeholder="カテゴリ名" v-model="category.category_name">
-                            <template slot="append">更新</template>
+                            <el-button slot="append" icon="el-icon-edit" @click="registerCategory"></el-button>
                         </el-input>
                     </el-col>
                     <el-col :span="24">
@@ -49,7 +49,7 @@
                     </el-col>
                 </el-row>
 
-                <el-dialog title="管理したいアイテムを入力してください" width="90%" :visible.sync="itemModalVisible">
+                <el-dialog title="アイテム名を入力してください" width="90%" :visible.sync="itemModalVisible">
                     <el-form :model="item" required>
                         <el-form-item label="アイテム" :label-width="formLabelWidth">
                             <el-input v-model="item.item_name" auto-complete="off"></el-input>

@@ -26,6 +26,36 @@ new Vue({
         self.getItems();
     },
     methods: {
+        registerCategory: function () {
+            var self = this;
+            var params = new URLSearchParams();
+            params.append('category_id', self.category.category_id);
+            params.append('category_name', self.category.category_name);
+            axios.post(
+                "/v1/category",
+                params
+            ).then(function (res) {
+                if (res.data.code == 200) {
+                    self.$message({
+                        dangerouslyUseHTMLString: true,
+                        message: `カテゴリ名を更新しました`,
+                        type: 'success'
+                    });
+                } else {
+                    self.$message({
+                        dangerouslyUseHTMLString: true,
+                        message: res.data.errors.join(`<br>`),
+                        type: 'error'
+                    });
+                }
+            }).catch(function (error) {
+                self.categoryModalVisible = false;
+                self.$message({
+                    type: 'warning',
+                    message: `しばらく時間をおいてから再度お試しください`
+                });
+            });
+        },
         openItem: function (id) {
             var self = this;
             axios.get(
