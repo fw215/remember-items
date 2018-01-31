@@ -22,6 +22,8 @@ import (
 	v2 "google.golang.org/api/oauth2/v2"
 )
 
+var jsVersion string = "0.0.2"
+
 // AppConf app用config
 type AppConf struct {
 	ClientID     string `json:"client_id"`
@@ -92,7 +94,8 @@ func Login(c *gin.Context) {
 	ClearSession(c)
 
 	c.HTML(200, "Login", gin.H{
-		"title": "ログイン｜アイテム管理",
+		"title":     "ログイン｜アイテム管理",
+		"jsVersion": jsVersion,
 	})
 }
 
@@ -104,11 +107,13 @@ func Index(c *gin.Context) {
 			"title":       "エラーが発生しました｜アイテム管理",
 			"error":       err,
 			"description": "5秒後にリダイレクトします...",
+			"jsVersion":   jsVersion,
 		})
 		return
 	}
 	c.HTML(200, "Index", gin.H{
-		"title": "アイテム管理",
+		"title":     "アイテム管理",
+		"jsVersion": jsVersion,
 	})
 }
 
@@ -120,6 +125,7 @@ func Items(c *gin.Context) {
 			"title":       "エラーが発生しました｜アイテム管理",
 			"error":       err,
 			"description": "5秒後にリダイレクトします...",
+			"jsVersion":   jsVersion,
 		})
 		return
 	}
@@ -128,6 +134,7 @@ func Items(c *gin.Context) {
 	c.HTML(200, "Items", gin.H{
 		"title":      "アイテム管理",
 		"CategoryID": CategoryID,
+		"jsVersion":  jsVersion,
 	})
 }
 
@@ -140,6 +147,7 @@ func v1Login(c *gin.Context) {
 			"title":       "エラーが発生しました｜アイテム管理",
 			"error":       "システムエラーが発生中です",
 			"description": "5秒後にリダイレクトします...",
+			"jsVersion":   jsVersion,
 		})
 		return
 	}
@@ -157,6 +165,7 @@ func v1GoogleCallback(c *gin.Context) {
 			"title":       "エラーが発生しました｜アイテム管理",
 			"error":       "データベース接続エラーが発生しました",
 			"description": "5秒後にリダイレクトします...",
+			"jsVersion":   jsVersion,
 		})
 		return
 	}
@@ -170,6 +179,7 @@ func v1GoogleCallback(c *gin.Context) {
 			"title":       "エラーが発生しました｜アイテム管理",
 			"error":       "認証に失敗しました",
 			"description": "5秒後にリダイレクトします...",
+			"jsVersion":   jsVersion,
 		})
 		return
 	}
@@ -180,6 +190,7 @@ func v1GoogleCallback(c *gin.Context) {
 			"title":       "エラーが発生しました｜アイテム管理",
 			"error":       "認証に失敗しました",
 			"description": "5秒後にリダイレクトします...",
+			"jsVersion":   jsVersion,
 		})
 		return
 	}
@@ -191,6 +202,7 @@ func v1GoogleCallback(c *gin.Context) {
 				"title":       "エラーが発生しました｜アイテム管理",
 				"error":       "データベースエラーが発生しました",
 				"description": "5秒後にリダイレクトします...",
+				"jsVersion":   jsVersion,
 			})
 			return
 		}
@@ -202,6 +214,7 @@ func v1GoogleCallback(c *gin.Context) {
 			"title":       "エラーが発生しました｜アイテム管理",
 			"error":       "データベースエラーが発生しました",
 			"description": "5秒後にリダイレクトします...",
+			"jsVersion":   jsVersion,
 		})
 		return
 	}
@@ -225,6 +238,7 @@ func v1GoogleCallback(c *gin.Context) {
 			"title":       "エラーが発生しました｜アイテム管理",
 			"error":       "データベースエラーが発生しました",
 			"description": "5秒後にリダイレクトします...",
+			"jsVersion":   jsVersion,
 		})
 		return
 	}
@@ -613,6 +627,7 @@ func NoRoute(c *gin.Context) {
 		"title":       "ページが見つかりません",
 		"error":       "ページが見つかりません",
 		"description": "5秒後にリダイレクトします...",
+		"jsVersion":   jsVersion,
 	})
 }
 

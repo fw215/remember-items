@@ -28,7 +28,7 @@
                         </el-input>
                     </el-col>
                     <el-col :span="24">
-                        <el-button type="primary" @click="itemModalVisible = true" id="btn-item-add" plain>アイテム追加</el-button>
+                        <el-button type="primary" @click="addOpenItem" id="btn-item-add" plain>アイテム追加</el-button>
                     </el-col>
                     <el-col :span="24">
                         <el-table :data="items" stripe style="width: 100%">
@@ -87,7 +87,7 @@
     <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/element-ui/2.0.8/index.js?v=2.0.8"></script>
     <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/element-ui/2.0.8/locale/ja.min.js?v=2.0.8"></script>
     <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/axios/0.17.1/axios.min.js?v=0.17.1"></script>
-    <script type="text/javascript" src="/js/items.js?v=0.0.1"></script>
+    <script type="text/javascript" src="/js/items.js?v={{.jsVersion}}"></script>
 
 </body>
 
