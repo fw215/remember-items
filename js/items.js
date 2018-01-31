@@ -56,6 +56,15 @@ new Vue({
                 });
             });
         },
+        addOpenItem: function () {
+            var self = this;
+            self.item = {
+                item_id: 0,
+                item_name: null,
+                item_image: null
+            };
+            self.itemModalVisible = true;
+        },
         openItem: function (id) {
             var self = this;
             axios.get(
