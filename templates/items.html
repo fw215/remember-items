@@ -1,4 +1,5 @@
-<html>
+<!DOCTYPE html>
+<html lang="ja">
 
 <head>
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
@@ -9,7 +10,7 @@
     <link rel="stylesheet" type="text/css" href="https://cdnjs.cloudflare.com/ajax/libs/normalize/7.0.0/normalize.min.css?v=7.0.0">
     <link rel="stylesheet" type="text/css" href="https://cdnjs.cloudflare.com/ajax/libs/element-ui/2.0.8/theme-chalk/index.css?v=2.0.8">
     <link rel="stylesheet" type="text/css" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css?v=4.7.0">
-    <link rel="stylesheet" type="text/css" href="/css/my-style.css?v=0.0.0">
+    <link rel="stylesheet" type="text/css" href="/css/my-style.css?v={{.version}}">
 </head>
 
 <body>
@@ -18,6 +19,7 @@
             <el-header>
                 <el-menu :default-active="activeIndex" mode="horizontal">
                     <el-menu-item index="1">アイテム管理</el-menu-item>
+                    <el-menu-item index="2" @click="goIndex">カテゴリ一覧</el-menu-item>
                 </el-menu>
             </el-header>
             <el-main>
@@ -72,8 +74,9 @@
                         -->
                     </el-form>
                     <span slot="footer" class="dialog-footer">
+                        <el-button type="danger" style="margin-bottom: 10px" @click="deleteItem" v-if="item.item_id != 0">削除する</el-button>
                         <el-button @click="itemModalVisible = false">閉じる</el-button>
-                        <el-button type="primary" @click="registerItem()">登録する</el-button>
+                        <el-button type="primary" @click="registerItem">登録する</el-button>
                     </span>
                 </el-dialog>
 
@@ -87,7 +90,7 @@
     <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/element-ui/2.0.8/index.js?v=2.0.8"></script>
     <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/element-ui/2.0.8/locale/ja.min.js?v=2.0.8"></script>
     <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/axios/0.17.1/axios.min.js?v=0.17.1"></script>
-    <script type="text/javascript" src="/js/items.js?v={{.jsVersion}}"></script>
+    <script type="text/javascript" src="/js/items.js?v={{.version}}"></script>
 
 </body>
 

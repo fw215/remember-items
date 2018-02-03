@@ -37,7 +37,6 @@ new Vue({
             ).then(function (res) {
                 if (res.data.code == 200) {
                     self.$message({
-                        dangerouslyUseHTMLString: true,
                         message: `カテゴリ名を更新しました`,
                         type: 'success'
                     });
@@ -73,6 +72,38 @@ new Vue({
                 if (res.data.code == 200) {
                     self.item = res.data.item;
                     self.itemModalVisible = true;
+                } else {
+                    self.$message({
+                        dangerouslyUseHTMLString: true,
+                        message: res.data.errors.join(`<br>`),
+                        type: 'error'
+                    });
+                }
+            }).catch(function (error) {
+                self.itemModalVisible = false;
+                self.$message({
+                    type: 'warning',
+                    message: `しばらく時間をおいてから再度お試しください`
+                });
+            });
+        },
+        deleteItem: function () {
+            var self = this;
+            axios.delete(
+                "/v1/item/" + self.item.item_id,
+            ).then(function (res) {
+                if (res.data.code == 200) {
+                    self.item = {
+                        item_id: 0,
+                        item_name: null,
+                        item_image: null
+                    };
+                    self.$message({
+                        message: `アイテムを削除しました`,
+                        type: 'success'
+                    });
+                    self.getItems();
+                    self.itemModalVisible = false;
                 } else {
                     self.$message({
                         dangerouslyUseHTMLString: true,
@@ -187,24 +218,8 @@ new Vue({
                 });
             });
         },
-        onFileChange: function (e) {
-            var files = e.target.files || e.dataTransfer.files;
-            if (!files.length) {
-                return;
-            }
-            this.createImage(files[0]);
+        goIndex: function () {
+            location.href = "/";
         },
-        createImage(file) {
-            var image = new Image();
-            var reader = new FileReader();
-            var vm = this;
-            reader.onload = function (e) {
-                vm.item.item_image = e.target.result;
-            };
-            reader.readAsDataURL(file);
-        },
-        removeImage: function (e) {
-            this.item.item_image = '';
-        }
     }
 })

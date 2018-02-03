@@ -22,7 +22,8 @@ import (
 	v2 "google.golang.org/api/oauth2/v2"
 )
 
-var jsVersion string = "0.0.2"
+// version chache用version
+var version string = "0.0.3"
 
 // AppConf app用config
 type AppConf struct {
@@ -82,6 +83,7 @@ func GinRun() {
 		v1.POST("/category", v1CategoryPOST)
 		v1.GET("/items/:CategoryID", v1Items)
 		v1.GET("/item/:ItemID", v1ItemGET)
+		v1.DELETE("/item/:ItemID", v1ItemDELETE)
 		v1.POST("/item", v1ItemPOST)
 	}
 
@@ -94,8 +96,8 @@ func Login(c *gin.Context) {
 	ClearSession(c)
 
 	c.HTML(200, "Login", gin.H{
-		"title":     "ログイン｜アイテム管理",
-		"jsVersion": jsVersion,
+		"title":   "ログイン｜アイテム管理",
+		"version": version,
 	})
 }
 
@@ -107,13 +109,13 @@ func Index(c *gin.Context) {
 			"title":       "エラーが発生しました｜アイテム管理",
 			"error":       err,
 			"description": "5秒後にリダイレクトします...",
-			"jsVersion":   jsVersion,
+			"version":     version,
 		})
 		return
 	}
 	c.HTML(200, "Index", gin.H{
-		"title":     "アイテム管理",
-		"jsVersion": jsVersion,
+		"title":   "アイテム管理",
+		"version": version,
 	})
 }
 
@@ -125,7 +127,7 @@ func Items(c *gin.Context) {
 			"title":       "エラーが発生しました｜アイテム管理",
 			"error":       err,
 			"description": "5秒後にリダイレクトします...",
-			"jsVersion":   jsVersion,
+			"version":     version,
 		})
 		return
 	}
@@ -134,7 +136,7 @@ func Items(c *gin.Context) {
 	c.HTML(200, "Items", gin.H{
 		"title":      "アイテム管理",
 		"CategoryID": CategoryID,
-		"jsVersion":  jsVersion,
+		"version":    version,
 	})
 }
 
@@ -147,7 +149,7 @@ func v1Login(c *gin.Context) {
 			"title":       "エラーが発生しました｜アイテム管理",
 			"error":       "システムエラーが発生中です",
 			"description": "5秒後にリダイレクトします...",
-			"jsVersion":   jsVersion,
+			"version":     version,
 		})
 		return
 	}
@@ -165,7 +167,7 @@ func v1GoogleCallback(c *gin.Context) {
 			"title":       "エラーが発生しました｜アイテム管理",
 			"error":       "データベース接続エラーが発生しました",
 			"description": "5秒後にリダイレクトします...",
-			"jsVersion":   jsVersion,
+			"version":     version,
 		})
 		return
 	}
@@ -179,7 +181,7 @@ func v1GoogleCallback(c *gin.Context) {
 			"title":       "エラーが発生しました｜アイテム管理",
 			"error":       "認証に失敗しました",
 			"description": "5秒後にリダイレクトします...",
-			"jsVersion":   jsVersion,
+			"version":     version,
 		})
 		return
 	}
@@ -190,7 +192,7 @@ func v1GoogleCallback(c *gin.Context) {
 			"title":       "エラーが発生しました｜アイテム管理",
 			"error":       "認証に失敗しました",
 			"description": "5秒後にリダイレクトします...",
-			"jsVersion":   jsVersion,
+			"version":     version,
 		})
 		return
 	}
@@ -202,7 +204,7 @@ func v1GoogleCallback(c *gin.Context) {
 				"title":       "エラーが発生しました｜アイテム管理",
 				"error":       "データベースエラーが発生しました",
 				"description": "5秒後にリダイレクトします...",
-				"jsVersion":   jsVersion,
+				"version":     version,
 			})
 			return
 		}
@@ -214,7 +216,7 @@ func v1GoogleCallback(c *gin.Context) {
 			"title":       "エラーが発生しました｜アイテム管理",
 			"error":       "データベースエラーが発生しました",
 			"description": "5秒後にリダイレクトします...",
-			"jsVersion":   jsVersion,
+			"version":     version,
 		})
 		return
 	}
@@ -238,7 +240,7 @@ func v1GoogleCallback(c *gin.Context) {
 			"title":       "エラーが発生しました｜アイテム管理",
 			"error":       "データベースエラーが発生しました",
 			"description": "5秒後にリダイレクトします...",
-			"jsVersion":   jsVersion,
+			"version":     version,
 		})
 		return
 	}
@@ -621,13 +623,81 @@ func v1ItemPOST(c *gin.Context) {
 	})
 }
 
+// v1ItemDELETE item登録
+func v1ItemDELETE(c *gin.Context) {
+	if err := LoginCheck(c); err != nil {
+		c.JSON(200, gin.H{
+			"code":  500,
+			"error": "ログインしてください",
+		})
+		return
+	}
+
+	ItemID := c.Param("ItemID")
+
+	InitDB()
+	defer db.Close()
+
+	if err := db.Ping(); err != nil {
+		c.JSON(200, gin.H{
+			"code":  500,
+			"error": "データベース接続エラーが発生しました",
+		})
+		return
+	}
+
+	var deleteID string
+	if err := db.QueryRow("SELECT `item_id` FROM `items` WHERE `item_id` = ? AND `user_id` = ? LIMIT 1", ItemID, userID).Scan(&deleteID); err != nil {
+		if err != sql.ErrNoRows {
+			c.JSON(200, gin.H{
+				"code":   500,
+				"errors": "データベースエラーが発生しました",
+			})
+			return
+		}
+	}
+
+	transaction, err := db.Begin()
+	if err != nil {
+		c.JSON(200, gin.H{
+			"code":   500,
+			"errors": "データベースエラーが発生しました",
+		})
+		return
+	}
+
+	if deleteID == "" {
+		c.JSON(200, gin.H{
+			"code":   500,
+			"errors": "データベースエラーが発生しました",
+		})
+		return
+	}
+
+	deleteSQL := "DELETE FROM `items` WHERE `item_id` = ? AND `user_id` = ?"
+	_, err = transaction.Exec(deleteSQL, deleteID, userID)
+	if err != nil {
+		transaction.Rollback()
+		c.JSON(200, gin.H{
+			"code":   500,
+			"errors": "データベースエラーが発生しました",
+		})
+		return
+	}
+	transaction.Commit()
+
+	c.JSON(200, gin.H{
+		"code": 200,
+	})
+}
+
 // NoRoute (404)Not Foundページ
 func NoRoute(c *gin.Context) {
 	c.HTML(404, "Error", gin.H{
 		"title":       "ページが見つかりません",
 		"error":       "ページが見つかりません",
 		"description": "5秒後にリダイレクトします...",
-		"jsVersion":   jsVersion,
+		"version":     version,
 	})
 }
 
@@ -748,7 +818,7 @@ func LoginCheck(c *gin.Context) error {
 			session.Save()
 		} else {
 			// リフレッシュトークンがないので再ログイン
-			return errors.New("アクセストークンの有効期限が切れています<br>ログインしてください")
+			return errors.New("アクセストークンの有効期限が切れています")
 		}
 	}
 

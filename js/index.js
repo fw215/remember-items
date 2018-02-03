@@ -66,8 +66,9 @@ new Vue({
                         confirmButtonText: 'はい',
                         callback: function (action) {
                             self.$message({
-                                type: 'warning',
-                                message: res.data.error
+                                dangerouslyUseHTMLString: true,
+                                message: res.data.errors.join(`<br>`),
+                                type: 'warning'
                             });
                         }
                     });
