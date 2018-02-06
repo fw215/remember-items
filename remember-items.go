@@ -1,14 +1,21 @@
 package main
 
 import (
+	"bytes"
 	"context"
+	"crypto/aes"
+	"crypto/cipher"
+	"crypto/rand"
 	"database/sql"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 
 	_ "github.com/go-sql-driver/mysql"
@@ -32,6 +39,7 @@ type AppConf struct {
 	RedirectURL  string `json:"redirect_url"`
 	AuthCode     string `json:"auth_code"`
 	CookieSecret string `json:"cookie_secret"`
+	AesSecret    string `json:"aes_secret"`
 }
 
 // CallbackRequest コールバックリクエスト
@@ -101,7 +109,7 @@ func Login(c *gin.Context) {
 	})
 }
 
-// Index トップページ
+// Index カテゴリ一覧
 func Index(c *gin.Context) {
 	if err := LoginCheck(c); err != nil {
 		ClearSession(c)
@@ -119,7 +127,7 @@ func Index(c *gin.Context) {
 	})
 }
 
-// Items トップページ
+// Items アイテム一覧
 func Items(c *gin.Context) {
 	if err := LoginCheck(c); err != nil {
 		ClearSession(c)
@@ -132,10 +140,20 @@ func Items(c *gin.Context) {
 		return
 	}
 
-	CategoryID := c.Param("CategoryID")
+	_, err := Decrypt(c.Param("CategoryID"))
+	if err != nil {
+		c.HTML(200, "Error", gin.H{
+			"title":       "エラーが発生しました｜アイテム管理",
+			"error":       "エラーが発生しました",
+			"description": "5秒後にリダイレクトします...",
+			"version":     version,
+		})
+		return
+	}
+
 	c.HTML(200, "Items", gin.H{
 		"title":      "アイテム管理",
-		"CategoryID": CategoryID,
+		"CategoryID": c.Param("CategoryID"),
 		"version":    version,
 	})
 }
@@ -294,8 +312,16 @@ func v1Categories(c *gin.Context) {
 			})
 			return
 		}
+		encryptCategoryID, err := Encrypt(categoryID)
+		if err != nil {
+			c.JSON(200, gin.H{
+				"code":  500,
+				"error": "エラーが発生しました",
+			})
+			return
+		}
 		data := gin.H{
-			"category_id":   categoryID,
+			"category_id":   encryptCategoryID,
 			"category_name": categoryName,
 			"modified":      modified,
 		}
@@ -319,7 +345,14 @@ func v1CategoryGET(c *gin.Context) {
 		return
 	}
 
-	CategoryID := c.Param("CategoryID")
+	CategoryID, err := Decrypt(c.Param("CategoryID"))
+	if err != nil {
+		c.JSON(200, gin.H{
+			"code":  500,
+			"error": "エラーが発生しました",
+		})
+		return
+	}
 
 	InitDB()
 	defer db.Close()
@@ -351,7 +384,7 @@ func v1CategoryGET(c *gin.Context) {
 	c.JSON(200, gin.H{
 		"code": 200,
 		"category": gin.H{
-			"category_id":   CategoryID,
+			"category_id":   c.Param("CategoryID"),
 			"category_name": CategoryName,
 		},
 	})
@@ -367,7 +400,18 @@ func v1CategoryPOST(c *gin.Context) {
 		return
 	}
 
-	CategoryID := c.PostForm("category_id")
+	var CategoryID string
+	var err error
+	if c.PostForm("category_id") != "0" {
+		CategoryID, err = Decrypt(c.PostForm("category_id"))
+		if err != nil {
+			c.JSON(200, gin.H{
+				"code":   500,
+				"errors": "エラーが発生しました",
+			})
+			return
+		}
+	}
 	CategoryName := c.PostForm("category_name")
 
 	var resError []string
@@ -457,7 +501,14 @@ func v1Items(c *gin.Context) {
 		return
 	}
 
-	CategoryID := c.Param("CategoryID")
+	CategoryID, err := Decrypt(c.Param("CategoryID"))
+	if err != nil {
+		c.JSON(200, gin.H{
+			"code":  500,
+			"error": "エラーが発生しました",
+		})
+		return
+	}
 	rows, err := db.Query("SELECT `item_id`, `item_name`, `item_image`, `modified` FROM `items` WHERE `category_id` = ? AND `user_id` = ?", CategoryID, userID)
 	if err != nil {
 		c.JSON(200, gin.H{
@@ -478,8 +529,16 @@ func v1Items(c *gin.Context) {
 			})
 			return
 		}
+		encryptItemID, err := Encrypt(itemID)
+		if err != nil {
+			c.JSON(200, gin.H{
+				"code":  500,
+				"error": "エラーが発生しました",
+			})
+			return
+		}
 		data := gin.H{
-			"item_id":    itemID,
+			"item_id":    encryptItemID,
 			"item_name":  itemName,
 			"item_image": itemImage,
 			"modified":   modified,
@@ -503,7 +562,14 @@ func v1ItemGET(c *gin.Context) {
 		return
 	}
 
-	ItemID := c.Param("ItemID")
+	ItemID, err := Decrypt(c.Param("ItemID"))
+	if err != nil {
+		c.JSON(200, gin.H{
+			"code":  500,
+			"error": "エラーが発生しました",
+		})
+		return
+	}
 
 	InitDB()
 	defer db.Close()
@@ -535,7 +601,7 @@ func v1ItemGET(c *gin.Context) {
 	c.JSON(200, gin.H{
 		"code": 200,
 		"item": gin.H{
-			"item_id":    ItemID,
+			"item_id":    c.Param("ItemID"),
 			"item_name":  ItemName,
 			"item_image": ItemImage,
 		},
@@ -552,8 +618,25 @@ func v1ItemPOST(c *gin.Context) {
 		return
 	}
 
-	CategoryID := c.PostForm("category_id")
-	ItemID := c.PostForm("item_id")
+	CategoryID, err := Decrypt(c.PostForm("category_id"))
+	if err != nil {
+		c.JSON(200, gin.H{
+			"code":  500,
+			"error": "エラーが発生しました",
+		})
+		return
+	}
+	var ItemID string
+	if c.PostForm("item_id") != "0" {
+		ItemID, err = Decrypt(c.PostForm("item_id"))
+		if err != nil {
+			c.JSON(200, gin.H{
+				"code":  500,
+				"error": "エラーが発生しました",
+			})
+			return
+		}
+	}
 	ItemName := c.PostForm("item_name")
 	ItemImage := c.PostForm("item_image")
 
@@ -633,7 +716,14 @@ func v1ItemDELETE(c *gin.Context) {
 		return
 	}
 
-	ItemID := c.Param("ItemID")
+	ItemID, err := Decrypt(c.Param("ItemID"))
+	if err != nil {
+		c.JSON(200, gin.H{
+			"code":  500,
+			"error": "エラーが発生しました",
+		})
+		return
+	}
 
 	InitDB()
 	defer db.Close()
@@ -957,4 +1047,90 @@ func InitDB() error {
 	}
 
 	return nil
+}
+
+// addBase64Padding AES Encryption
+func addBase64Padding(value string) string {
+	m := len(value) % 4
+	if m != 0 {
+		value += strings.Repeat("=", 4-m)
+	}
+
+	return value
+}
+
+// removeBase64Padding AES Encryption
+func removeBase64Padding(value string) string {
+	return strings.Replace(value, "=", "", -1)
+}
+
+// Pad AES Encryption
+func Pad(src []byte) []byte {
+	padding := aes.BlockSize - len(src)%aes.BlockSize
+	padtext := bytes.Repeat([]byte{byte(padding)}, padding)
+	return append(src, padtext...)
+}
+
+// Unpad AES Encryption
+func Unpad(src []byte) ([]byte, error) {
+	length := len(src)
+	unpadding := int(src[length-1])
+
+	if unpadding > length {
+		return nil, errors.New("unpad error. This could happen when incorrect encryption key is used")
+	}
+
+	return src[:(length - unpadding)], nil
+}
+
+// Encrypt AES Encryption
+func Encrypt(text string) (string, error) {
+	key := []byte(appConf.AesSecret)
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		return "", err
+	}
+
+	msg := Pad([]byte(text))
+	ciphertext := make([]byte, aes.BlockSize+len(msg))
+	iv := ciphertext[:aes.BlockSize]
+	if _, err := io.ReadFull(rand.Reader, iv); err != nil {
+		return "", err
+	}
+
+	cfb := cipher.NewCFBEncrypter(block, iv)
+	cfb.XORKeyStream(ciphertext[aes.BlockSize:], []byte(msg))
+	finalMsg := removeBase64Padding(base64.URLEncoding.EncodeToString(ciphertext))
+	return finalMsg, nil
+}
+
+// Decrypt AES Encryption
+func Decrypt(text string) (string, error) {
+	key := []byte(appConf.AesSecret)
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		return "", err
+	}
+
+	decodedMsg, err := base64.URLEncoding.DecodeString(addBase64Padding(text))
+	if err != nil {
+		return "", err
+	}
+
+	if (len(decodedMsg) % aes.BlockSize) != 0 {
+		return "", errors.New("blocksize must be multipe of decoded message length")
+	}
+
+	iv := decodedMsg[:aes.BlockSize]
+	msg := decodedMsg[aes.BlockSize:]
+
+	cfb := cipher.NewCFBDecrypter(block, iv)
+	cfb.XORKeyStream(msg, msg)
+
+	unpadMsg, err := Unpad(msg)
+	if err != nil {
+		return "", err
+	}
+
+	return string(unpadMsg), nil
 }
