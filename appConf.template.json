@@ -3,5 +3,6 @@
     "client_secret": "xxxxxxx",
     "redirect_url": "xxxxxxx",
     "auth_code": "xxxxxxx",
-    "cookie_secret": "xxxxxxx"
+    "cookie_secret": "xxxxxxx",
+    "aes_secret": "xxxxxxx"
 }
